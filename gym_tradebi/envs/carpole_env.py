@@ -9,11 +9,6 @@ import gym
 from gym import spaces, logger
 from gym.utils import seeding
 import numpy as np
-import pandas as pd
-
-import json
-import datetime
-import time
 
 import logging
 
@@ -35,11 +30,10 @@ class TradebiEnv(gym.Env):
         3	Pole Velocity At Tip      -Inf            Inf
         
     Actions:
-        Type: Discrete(3)
+        Type: Discrete(2)
         Num	Action
-        0	Hold
-        1	Long
-        2   Short
+        0	Push cart to the left
+        1	Push cart to the right
         
         Note: The amount the velocity is reduced or increased is not fixed as it depends on the angle the pole is pointing. This is because the center of gravity of the pole increases the amount of energy needed to move the cart underneath it
     Reward:
