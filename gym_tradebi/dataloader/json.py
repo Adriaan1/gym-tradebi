@@ -10,7 +10,7 @@ class Dataloader():
     def __init__(self, fileName):
 
         with open(fileName) as f:
-            response = json.loads(f)
+            response = json.load(f)
 
         received = response["candles"]
 
@@ -35,11 +35,11 @@ class Dataloader():
        
         #Convert the dictionary to pandas DataFrame:
         #Date_Time (index) | Open | High | Low | Close | Volume
-        df = pd.DataFrame(data)
+        self.df = pd.DataFrame(data)
 
-        df["Date_Time"] = pd.to_datetime(df["Date_Time"])
-        df.set_index(["Date_Time"], inplace=True)
+        self.df["Date_Time"] = pd.to_datetime(self.df["Date_Time"])
+        self.df.set_index(["Date_Time"], inplace=True)  
 
-        return df
+    def getData(self):
 
-        
+        return self.df      

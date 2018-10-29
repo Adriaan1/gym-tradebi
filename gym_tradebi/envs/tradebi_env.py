@@ -64,25 +64,9 @@ class TradebiEnv(gym.Env):
     
 
     def __init__(self):
-        self.gravity = 9.8
-        self.masscart = 1.0
-        self.masspole = 0.1
-        self.total_mass = (self.masspole + self.masscart)
-        self.length = 0.5 # actually half the pole's length
-        self.polemass_length = (self.masspole * self.length)
-        self.force_mag = 10.0
-        self.tau = 0.02  # seconds between state updates
-        self.kinematics_integrator = 'euler'
-
-        # Angle at which to fail the episode
-        self.theta_threshold_radians = 12 * 2 * math.pi / 360
-        self.x_threshold = 2.4
-
-        #data = Dataloader('../history/EUR_USD_H1_history.json')
-
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation is still within bounds
-        high = np.array([
+        """ high = np.array([
             self.x_threshold * 2,
             np.finfo(np.float32).max,
             self.theta_threshold_radians * 2,
@@ -95,7 +79,44 @@ class TradebiEnv(gym.Env):
         self.viewer = None
         self.state = None
 
-        self.steps_beyond_done = None
+        self.steps_beyond_done = None """
+
+        source = Dataloader('EUR_USD_H1_history.json')
+
+        self.df = source.getData()
+
+        high = np.array([])
+        low = np.array([])
+
+        for cname in list(self.df.columns.values):
+            high = np.append(high,np.array([self.df[cname].max()]))
+            low = np.append(low,np.array([self.df[cname].min()]))
+
+        self.action_space = spaces.Discrete(3)
+        self.observation_space = spaces.Box(low, high, dtype=np.float32)
+
+        self.seed()
+        self.currentIndex = 0
+
+    def init_dataloader(self):
+
+        source = Dataloader('EUR_USD_H1_history.json')
+
+        self.df = source.getData()
+
+        high = np.array([])
+        low = np.array([])
+
+        for cname in list(self.df.columns.values):
+            high = np.append(high,np.array([self.df[cname].max()]))
+            low = np.append(low,np.array([self.df[cname].min()]))
+
+        self.action_space = spaces.Discrete(3)
+        self.observation_space = spaces.Box(low, high, dtype=np.float32)
+
+        self.seed()
+        self.state = None
+        self.currentIndex = 0
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -103,7 +124,10 @@ class TradebiEnv(gym.Env):
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-        state = self.state
+        
+        self.state = self.df.values[self.current_index]
+        
+        """ state = self.state
         x, x_dot, theta, theta_dot = state
         force = self.force_mag if action==1 else -self.force_mag
         costheta = math.cos(theta)
@@ -121,7 +145,8 @@ class TradebiEnv(gym.Env):
             x  = x + self.tau * x_dot
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
-        self.state = (x,x_dot,theta,theta_dot)
+        self.state = (x,x_dot,theta,theta_dot) """
+        
         done =  x < -self.x_threshold \
                 or x > self.x_threshold \
                 or theta < -self.theta_threshold_radians \
