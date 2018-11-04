@@ -19,6 +19,8 @@ import time
 
 import logging
 
+from .utils import Trade, TradeType, Portfolio
+
 log = logging.getLogger(__name__)
 log.info('%s logger started.',__name__)
 
@@ -85,18 +87,28 @@ class TradebiEnv(gym.Env):
 
         self.df = source.getData()
 
+        self.portfolio = Portfolio()
+
+        self.running_step = 0
+
+        #self.orders = []
+        
+        self.lot = 1
+        self.capital = 10000
+        self.precision = 0.00001
+
         high = np.array([])
         low = np.array([])
 
-        for cname in list(self.df.columns.values):
-            high = np.append(high,np.array([self.df[cname].max()]))
-            low = np.append(low,np.array([self.df[cname].min()]))
+        for column_name in list(self.df.columns.values):
+            high = np.append(high,np.array([self.df[column_name].max()]))
+            low = np.append(low,np.array([self.df[column_name].min()]))
 
         self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(low, high, dtype=np.float32)
 
         self.seed()
-        self.currentIndex = 0
+        self.current_index = 0
 
     def init_dataloader(self):
 
@@ -126,7 +138,62 @@ class TradebiEnv(gym.Env):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         
         self.state = self.df.values[self.current_index]
+
+        current_value = self.state[0]
+        trade_time = self.df.index[self.current_index]
+
+        #print("currentValue: " + str(current_value))
+
+        reward = 0
+
+        # if action == 0 calculate capital
+        # if action == 1 no order/close the sell order, create LONG order. calculate capital and reward
+        # if action == 2 no order/close the sell order, create LONG order. calculate capital and reward
         
+        if(action == 1):
+
+            if (len(self.portfolio.trades) == 0): 
+                self.portfolio.trades.append(Trade(TradeType.LONG,self.lot,current_value,self.precision, trade_time))
+            else:
+                existingOrder = self.portfolio.trades[0]
+
+                if(existingOrder.trade_type == TradeType.SHORT):
+                    reward = existingOrder.close(current_value)
+                    self.portfolio.trades.append(Trade(TradeType.LONG,self.lot,current_value, self.precision, trade_time))
+
+        elif(action == 2):
+
+            # if there is no order
+            if (len(self.portfolio.trades) == 0): 
+                self.portfolio.trades.append(Trade(TradeType.SHORT,self.lot,current_value,self.precision, trade_time))
+            else:
+                existingOrder = self.portfolio.trades[0]
+
+                if(existingOrder.trade_type == TradeType.LONG):
+                    reward = existingOrder.close(current_value)
+                    self.portfolio.trades.append(Trade(TradeType.SHORT,self.lot,current_value,self.precision, trade_time))
+
+        self.capital += reward
+        self.portfolio.total_reward += reward 
+
+        done = self.current_index == len(self.df.index) - 1 or \
+               self.capital <= 0
+
+        self.current_index += 1
+
+        if(done):
+            self.running_step += 1
+            print("done: " + str(done))
+            print("step: " + str(self.running_step))
+            #print("state: ")
+            #print(*self.state)
+            #print("action: " + str(action))
+            print("total_reward: " + str(self.portfolio.total_reward))
+            print("capital: " + str(self.capital))
+            #print("reward: " + str(reward))
+            
+            
+
         """ state = self.state
         x, x_dot, theta, theta_dot = state
         force = self.force_mag if action==1 else -self.force_mag
@@ -147,7 +214,7 @@ class TradebiEnv(gym.Env):
             theta = theta + self.tau * theta_dot
         self.state = (x,x_dot,theta,theta_dot) """
         
-        done =  x < -self.x_threshold \
+        """ done =  x < -self.x_threshold \
                 or x > self.x_threshold \
                 or theta < -self.theta_threshold_radians \
                 or theta > self.theta_threshold_radians
@@ -163,13 +230,20 @@ class TradebiEnv(gym.Env):
             if self.steps_beyond_done == 0:
                 logger.warn("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
             self.steps_beyond_done += 1
-            reward = 0.0
+            reward = 0.0 """
 
-        return np.array(self.state), reward, done, {}
+        
+
+        return np.array(self.state), self.portfolio.total_reward, done, {}
 
     def reset(self):
-        self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
-        self.steps_beyond_done = None
+        #self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
+        #self.steps_beyond_done = None
+        self.current_index = 0
+        self.state = self.df.values[self.current_index]
+        self.capital = 10000
+        self.portfolio.reset()
+
         return np.array(self.state)
 
     def render(self, mode='human'):
