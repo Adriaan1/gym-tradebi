@@ -3,7 +3,7 @@ from gym.envs.registration import register
 register(
     id='tradebi-v0',
     entry_point='gym_tradebi.envs:TradebiEnv',
-    timestep_limit=1000,
+    timestep_limit=10000,
 )
 #register(
 #    id='foo-extrahard-v0',

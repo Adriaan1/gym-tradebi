@@ -19,7 +19,7 @@ import time
 
 import logging
 
-from .utils import Trade, TradeType, Portfolio
+from .utils import Trade, TradeType, Portfolio, Visual, Record
 
 log = logging.getLogger(__name__)
 log.info('%s logger started.',__name__)
@@ -63,25 +63,9 @@ class TradebiEnv(gym.Env):
         'video.frames_per_second' : 50
     }
 
-    
-
     def __init__(self):
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation is still within bounds
-        """ high = np.array([
-            self.x_threshold * 2,
-            np.finfo(np.float32).max,
-            self.theta_threshold_radians * 2,
-            np.finfo(np.float32).max])
-
-        self.action_space = spaces.Discrete(2)
-        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
-
-        self.seed()
-        self.viewer = None
-        self.state = None
-
-        self.steps_beyond_done = None """
 
         source = Dataloader('EUR_USD_H1_history.json')
 
@@ -89,12 +73,15 @@ class TradebiEnv(gym.Env):
 
         self.portfolio = Portfolio()
 
+        self.record = Record()
+
         self.running_step = 0
 
         #self.orders = []
-        
+        self.CAPITAL = 1000
+
         self.lot = 1
-        self.capital = 10000
+        self.capital = self.CAPITAL
         self.precision = 0.00001
 
         high = np.array([])
@@ -135,7 +122,7 @@ class TradebiEnv(gym.Env):
         return [seed]
 
     def step(self, action):
-        assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
+        assert self.action_space.contains(action), "%r (%s) invalid %r"%(action, type(action), self.action_space)
         
         self.state = self.df.values[self.current_index]
 
@@ -149,17 +136,19 @@ class TradebiEnv(gym.Env):
         # if action == 0 calculate capital
         # if action == 1 no order/close the sell order, create LONG order. calculate capital and reward
         # if action == 2 no order/close the sell order, create LONG order. calculate capital and reward
-        
-        if(action == 1):
+        if(action == 0):
+            reward = -10
+
+        elif(action == 1):
 
             if (len(self.portfolio.trades) == 0): 
                 self.portfolio.trades.append(Trade(TradeType.LONG,self.lot,current_value,self.precision, trade_time))
             else:
                 existingOrder = self.portfolio.trades[0]
 
-                if(existingOrder.trade_type == TradeType.SHORT):
-                    reward = existingOrder.close(current_value)
-                    self.portfolio.trades.append(Trade(TradeType.LONG,self.lot,current_value, self.precision, trade_time))
+                #if(existingOrder.trade_type == TradeType.SHORT):
+                reward = existingOrder.close(current_value, trade_time)
+                self.portfolio.trades.append(Trade(TradeType.LONG,self.lot,current_value, self.precision, trade_time))
 
         elif(action == 2):
 
@@ -169,9 +158,9 @@ class TradebiEnv(gym.Env):
             else:
                 existingOrder = self.portfolio.trades[0]
 
-                if(existingOrder.trade_type == TradeType.LONG):
-                    reward = existingOrder.close(current_value)
-                    self.portfolio.trades.append(Trade(TradeType.SHORT,self.lot,current_value,self.precision, trade_time))
+                #if(existingOrder.trade_type == TradeType.LONG):
+                reward = existingOrder.close(current_value, trade_time)
+                self.portfolio.trades.append(Trade(TradeType.SHORT,self.lot,current_value,self.precision, trade_time))
 
         self.capital += reward
         self.portfolio.total_reward += reward 
@@ -182,72 +171,50 @@ class TradebiEnv(gym.Env):
         self.current_index += 1
 
         if(done):
+            print("-------Episode "+str(self.running_step)+"-------")
             self.running_step += 1
             print("done: " + str(done))
-            print("step: " + str(self.running_step))
+            print("index: " + str(self.current_index))
+            #print("Episode: " + str(self.running_step))
             #print("state: ")
             #print(*self.state)
             #print("action: " + str(action))
             print("total_reward: " + str(self.portfolio.total_reward))
             print("capital: " + str(self.capital))
+            self.record.add(self.portfolio)
+            #[print(t) for t in self.portfolio.trades]
+            print("------------------------------------------------")
+            
             #print("reward: " + str(reward))
-            
-            
-
-        """ state = self.state
-        x, x_dot, theta, theta_dot = state
-        force = self.force_mag if action==1 else -self.force_mag
-        costheta = math.cos(theta)
-        sintheta = math.sin(theta)
-        temp = (force + self.polemass_length * theta_dot * theta_dot * sintheta) / self.total_mass
-        thetaacc = (self.gravity * sintheta - costheta* temp) / (self.length * (4.0/3.0 - self.masspole * costheta * costheta / self.total_mass))
-        xacc  = temp - self.polemass_length * thetaacc * costheta / self.total_mass
-        if self.kinematics_integrator == 'euler':
-            x  = x + self.tau * x_dot
-            x_dot = x_dot + self.tau * xacc
-            theta = theta + self.tau * theta_dot
-            theta_dot = theta_dot + self.tau * thetaacc
-        else: # semi-implicit euler
-            x_dot = x_dot + self.tau * xacc
-            x  = x + self.tau * x_dot
-            theta_dot = theta_dot + self.tau * thetaacc
-            theta = theta + self.tau * theta_dot
-        self.state = (x,x_dot,theta,theta_dot) """
-        
-        """ done =  x < -self.x_threshold \
-                or x > self.x_threshold \
-                or theta < -self.theta_threshold_radians \
-                or theta > self.theta_threshold_radians
-        done = bool(done)
-
-        if not done:
-            reward = 1.0
-        elif self.steps_beyond_done is None:
-            # Pole just fell!
-            self.steps_beyond_done = 0
-            reward = 1.0
-        else:
-            if self.steps_beyond_done == 0:
-                logger.warn("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
-            self.steps_beyond_done += 1
-            reward = 0.0 """
 
         
 
-        return np.array(self.state), self.portfolio.total_reward, done, {}
+        return np.array(self.state), reward, done, {}
 
     def reset(self):
         #self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         #self.steps_beyond_done = None
         self.current_index = 0
         self.state = self.df.values[self.current_index]
-        self.capital = 10000
-        self.portfolio.reset()
+        self.capital = self.CAPITAL
+        self.portfolio = Portfolio()
 
         return np.array(self.state)
 
     def render(self, mode='human'):
-        screen_width = 600
+
+        print("Number of records: " + str(len(self.record.portfolios)))
+        #print("Highest Reward: " + str(self.record.portfolios[0].total_reward))
+
+        #for p in self.record.portfolios:
+        #    print(p.total_reward)
+
+        self.visual = Visual()
+
+        self.visual.candelPlot(self.df, self.record.portfolios[17170.99999999991])
+        
+
+        """screen_width = 600
         screen_height = 400
 
         world_width = self.x_threshold*2
@@ -290,7 +257,7 @@ class TradebiEnv(gym.Env):
         self.carttrans.set_translation(cartx, carty)
         self.poletrans.set_rotation(-x[2])
 
-        return self.viewer.render(return_rgb_array = mode=='rgb_array')
+        return self.viewer.render(return_rgb_array = mode=='rgb_array')"""
 
     def close(self):
         if self.viewer:
